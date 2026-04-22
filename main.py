@@ -15,8 +15,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+# Tratamento da URL do Redis no Easypanel
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+if "@" in REDIS_URL:
+    protocol_user_pass, host_port = REDIS_URL.rsplit("@", 1)
+    protocol_user_pass = protocol_user_pass.replace("#", "%23")
+    REDIS_URL = f"{protocol_user_pass}@{host_port}"
 
 # Pool do Redis será inicializado no startup da API
 redis_pool = None
@@ -24,7 +28,7 @@ redis_pool = None
 @app.on_event("startup")
 async def startup_event():
     global redis_pool
-    redis_pool = await create_pool(RedisSettings(host=REDIS_HOST, port=REDIS_PORT))
+    redis_pool = await create_pool(RedisSettings.from_dsn(REDIS_URL))
 
 @app.on_event("shutdown")
 async def shutdown_event():

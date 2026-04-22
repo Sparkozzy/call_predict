@@ -107,5 +107,11 @@ Toda execução deve ser registrada no Supabase seguindo o padrão Mestre-Detalh
 - **Redis**: Configurado via `RedisSettings` do ARQ; gerenciado pelo próprio ARQ.
 - **Imports pesados**: `xgboost`, `pandas` devem ser importados apenas no worker, nunca no módulo da API.
 
+## 🛠️ Infraestrutura e Deploy no Easypanel
+
+1. **Conexões Redis (ARQ)**: NUNCA utilize variáveis separadas como `REDIS_HOST` e `REDIS_PORT`. O Easypanel injeta uma única string de conexão chamada `REDIS_URL`. Você DEVE sempre ler o `os.getenv("REDIS_URL")`, tratar caracteres especiais (como `#` substituído por `%23`) e inicializar o ARQ exclusivamente com `RedisSettings.from_dsn(REDIS_URL)`.
+2. **Persistência de Modelos de ML**: Nossos modelos XGBoost são exportados no formato binário `.pkl`. O carregamento em memória (dentro do hook `startup` do ARQ) DEVE ser feito utilizando a biblioteca `joblib` (`joblib.load()`), e nunca via arquivos `.json`.
+3. **Workers Desacoplados**: O Easypanel roda o Worker em um contêiner separado da API. Se o Worker tentar conectar no `localhost`, ele falhará. Ele sempre dependerá da `REDIS_URL` injetada via variável de ambiente para achar o contêiner vizinho.
+
 ---
 *Este documento é a fonte da verdade para o desenvolvimento do ecossistema MindFlow.*

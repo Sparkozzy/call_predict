@@ -259,6 +259,15 @@ Seguindo a convenção `call_predict_<OQF>`:
 - [ ] **Passo 8** — Persistência em `model_executions`
 - [ ] **Passo 9** — Disparo da ligação Retell
 
+
+## Server and deploy
+
+O servidor está configurado para realizar deploy automático do código na branch main do github.
+
+Link do repositório: https://github.com/Sparkozzy/call_predict.git
+
+Para testar workflow em produção, execute comandos como no exemplo de requisição.
+
 ---
 
 *Referência: `docs/architecture.md` · `docs/conventions.md`*

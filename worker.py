@@ -1,65 +1,62 @@
 import os
 import logging
+import joblib
 import xgboost as xgb
 from arq.connections import RedisSettings
 from dotenv import load_dotenv
 from services import process_call_predict
 
-# Configuração de Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+# Tratamento obrigatório da URL do Redis no Easypanel
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+if "@" in REDIS_URL:
+    protocol_user_pass, host_port = REDIS_URL.rsplit("@", 1)
+    protocol_user_pass = protocol_user_pass.replace("#", "%23")
+    REDIS_URL = f"{protocol_user_pass}@{host_port}"
 
 async def startup(ctx):
-    """
-    Hook de inicialização do Worker.
-    Carrega os modelos XGBoost para a RAM uma única vez.
-    """
-    logger.info("Iniciando Worker: Carregando modelos XGBoost para a memória...")
+    """Hook de inicialização: Carrega os modelos .pkl para a RAM."""
+    logger.info("Iniciando Worker: Carregando modelos .pkl para a memória...")
     
-    # Caminhos dos modelos
-    ls_model_path = "models/lead_scoring.json"
-    tp_model_path = "models/timing_predict.json"
+    ls_model_path = "models/xgboost_LS_model.pkl"
+    tp_model_path = "models/xgboost_model_TP_V1.pkl"
     
-    # Carregamento Lead Scoring
     try:
         if os.path.exists(ls_model_path):
-            model_ls = xgb.Booster()
-            model_ls.load_model(ls_model_path)
-            ctx["model_ls"] = model_ls
+            ctx["model_ls"] = joblib.load(ls_model_path)
             logger.info(f"Modelo Lead Scoring carregado: {ls_model_path}")
         else:
-            logger.error(f"Arquivo de modelo não encontrado: {ls_model_path}")
+            logger.error(f"Arquivo não encontrado: {ls_model_path}")
             ctx["model_ls"] = None
     except Exception as e:
-        logger.error(f"Erro ao carregar modelo Lead Scoring: {e}")
+        logger.error(f"Erro ao carregar Lead Scoring: {e}")
         ctx["model_ls"] = None
 
-    # Carregamento Timing Predict
     try:
         if os.path.exists(tp_model_path):
-            model_tp = xgb.Booster()
-            model_tp.load_model(tp_model_path)
-            ctx["model_tp"] = model_tp
+            ctx["model_tp"] = joblib.load(tp_model_path)
             logger.info(f"Modelo Timing Predict carregado: {tp_model_path}")
         else:
-            logger.error(f"Arquivo de modelo não encontrado: {tp_model_path}")
+            logger.error(f"Arquivo não encontrado: {tp_model_path}")
             ctx["model_tp"] = None
     except Exception as e:
-        logger.error(f"Erro ao carregar modelo Timing Predict: {e}")
+        logger.error(f"Erro ao carregar Timing Predict: {e}")
         ctx["model_tp"] = None
 
 async def shutdown(ctx):
-    """Hook de encerramento do Worker."""
     logger.info("Encerrando Worker...")
 
 class WorkerSettings:
-    """Configurações do Worker ARQ."""
     functions = [process_call_predict]
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = RedisSettings(host=REDIS_HOST, port=REDIS_PORT)
+    
+    # Inicialização obrigatória via DSN
+    redis_settings = RedisSettings.from_dsn(REDIS_URL)
+    
+    max_jobs = 50
+    job_timeout = 300
