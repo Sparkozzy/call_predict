@@ -36,12 +36,9 @@ async def register_workflow_execution(
         "started_at": get_utc_now() if status == "RUNNING" else None,
         "created_at": get_utc_now()
     }
-    try:
-        # Upsert baseado no ID (execution_id)
-        supabase.table("workflow_executions").upsert(data).execute()
-        logger.info(f"Workflow {workflow_name} ({execution_id}) registrado como {status}.")
-    except Exception as e:
-        logger.error(f"Erro ao registrar execução do workflow: {e}")
+    # Upsert baseado no ID (execution_id)
+    supabase.table("workflow_executions").upsert(data).execute()
+    logger.info(f"Workflow {workflow_name} ({execution_id}) registrado como {status}.")
 
 async def update_workflow_status(execution_id: str, status: str, output_data: Optional[Dict[str, Any]] = None, error_details: Optional[str] = None):
     """Atualiza o status final ou intermediário do workflow."""

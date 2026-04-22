@@ -84,7 +84,7 @@ Você tem acesso às ferramentas de MCP do Supabase (para manipulação direta d
 ## Documentação (Docs)
 
 Mantenha a pasta `docs` sempre atualizada. Se o projeto mudar, a documentação DEVE acompanhar.
--   `architecture.md`: Visão técnica de infra e banco de dados.
+-   `architecture.md`: Visão técnica de infra e banco de dados. Neste doc há uma estrutura de pastas e arquivos do projeto. Sempre a conulte antes de realizar modificações no projeto. Ao final de uma modificação dos códigos, atualize este arquivo.
 -   `conventions.md`: Regras de ouro de codificação e padrões EDW.
 -   `workflow.md`: Consta o objetivo do workflow que está sendo criado e seus passos.
 

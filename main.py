@@ -79,4 +79,16 @@ async def predict_webhook(payload: CallPredictPayload):
 
 @app.get("/health", tags=["Monitoring"])
 async def health_check():
-    return {"status": "ok", "redis": "connected" if redis_pool else "disconnected"}
+    from database import supabase
+    try:
+        # Testa Supabase com uma query simples
+        supabase.table("workflow_executions").select("id").limit(1).execute()
+        db_status = "connected"
+    except Exception:
+        db_status = "error"
+        
+    return {
+        "status": "ok", 
+        "redis": "connected" if redis_pool else "disconnected",
+        "supabase": db_status
+    }
