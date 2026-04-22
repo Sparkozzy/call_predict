@@ -6,6 +6,7 @@ from arq.connections import RedisSettings
 from dotenv import load_dotenv
 
 from schemas import CallPredictPayload, AcceptedResponse
+from utils import register_workflow_execution
 
 load_dotenv()
 
@@ -48,6 +49,13 @@ async def predict_webhook(payload: CallPredictPayload):
     Retorna 202 Accepted imediatamente.
     """
     execution_id = str(uuid.uuid4())
+    
+    # Início do Fluxo: Registrar entrada em workflow_executions como PENDING
+    await register_workflow_execution(
+        execution_id=execution_id,
+        workflow_name="pre_call_processing",
+        input_data=payload.model_dump()
+    )
     
     try:
         # Enfileira a tarefa no ARQ (Redis)
