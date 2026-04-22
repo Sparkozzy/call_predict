@@ -4,7 +4,7 @@ import joblib
 import xgboost as xgb
 from arq.connections import RedisSettings
 from dotenv import load_dotenv
-from services import process_call_predict
+from services import process_call_predict, trigger_retell_call
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ async def shutdown(ctx):
     logger.info("Encerrando Worker...")
 
 class WorkerSettings:
-    functions = [process_call_predict]
+    functions = [process_call_predict, trigger_retell_call]
     on_startup = startup
     on_shutdown = shutdown
     

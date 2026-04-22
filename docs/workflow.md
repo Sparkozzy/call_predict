@@ -253,11 +253,11 @@ Seguindo a convenção `call_predict_<OQF>`:
 - [x] **Passo 2** — Schemas Pydantic criados
 - [x] **Passo 3** — Endpoint `POST /webhook/predict` criado
 - [x] **Passo 4** — Worker com startup de modelos + assinatura `process_call_predict`
-- [ ] **Passo 5** — ETL de features (próxima sessão)
-- [ ] **Passo 6** — Cascata Lead Scoring
-- [ ] **Passo 7** — Timing Predict
-- [ ] **Passo 8** — Persistência em `model_executions`
-- [ ] **Passo 9** — Disparo da ligação Retell
+- [x] **Passo 5** — ETL de features
+- [x] **Passo 6** — Cascata Lead Scoring
+- [x] **Passo 7** — Timing Predict
+- [x] **Passo 8** — Persistência em `model_executions`
+- [x] **Passo 9** — Disparo da ligação Retell
 
 
 ## Server and deploy

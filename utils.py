@@ -117,3 +117,16 @@ async def run_step_with_retry(
             attempt += 1
 
     raise Exception(f"Step {step_name} falhou após {max_retries} tentativas. Último erro: {last_error}")
+
+def get_next_occurrence_of_hour(hour: int) -> datetime:
+    """
+    Calcula o próximo datetime (UTC) correspondente à hora informada (0-23) no fuso de Brasília.
+    """
+    from datetime import timedelta
+    now_br = get_br_now()
+    target_br = now_br.replace(hour=hour, minute=0, second=0, microsecond=0)
+    
+    if target_br <= now_br:
+        target_br += timedelta(days=1)
+        
+    return target_br.astimezone(timezone.utc)
