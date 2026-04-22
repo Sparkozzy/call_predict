@@ -109,7 +109,7 @@ Se o documento `workflow.md` estiver disponível, você segue um ciclo de TDD (t
 *TDD*:
 
 1.  Crie o nó.
-2.  Suba o código para o servidor.
+2.  Suba o código para o servidor. Guia de como subir o código no servidor se encontra na dosumentação do workflow
 3.  Crie casos de teste que podem dar erros não previstos que possam quebrar o workflow e resultar em falhas no objetivo Para cada caso de teste, siga o loop:
     a. Execute o workflow.
     b. Entenda por que o nó dá erro.
