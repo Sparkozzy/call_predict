@@ -248,17 +248,6 @@ Seguindo a convenção `call_predict_<OQF>`:
 
 ## Status do Workflow
 
-- [x] **Passo 0** — Documentação criada
-- [x] **Passo 1** — Dependências adicionadas
-- [x] **Passo 2** — Schemas Pydantic criados
-- [x] **Passo 3** — Endpoint `POST /webhook/predict` criado
-- [x] **Passo 4** — Worker com startup de modelos + assinatura `process_call_predict`
-- [x] **Passo 5** — ETL de features
-- [x] **Passo 6** — Cascata Lead Scoring
-- [x] **Passo 7** — Timing Predict
-- [x] **Passo 8** — Persistência em `model_executions`
-- [x] **Passo 9** — Disparo da ligação Retell
-
 
 ## Server and deploy
 
