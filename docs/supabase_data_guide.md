@@ -413,20 +413,26 @@ Este campo é usado como feature pelo modelo Lead Scoring:
 # Busca histórico de chamadas de um número específico
 # ⚠️ Ordenação DESC + limit 150 garante que pegamos as linhas mais recentes
 response = supabase.table("Retell_calls_Mindflow")\
-    .select("to_number, created_at, disconnection_reason")\
+    .select("to_number, created_at, disconnection_reason, call_id")\
     .eq("to_number", numero)\
     .order("created_at", desc=True)\
     .limit(150)\
     .execute()
 
-# Reverter para ASC (cronológico) para cálculos corretos de features
-rows = list(reversed(response.data))
+# Deduplicação por call_id (manter o evento mais recente de cada ligação)
+seen_call_ids = set()
+deduplicated_rows = []
+for row in response.data:
+    c_id = row.get("call_id")
+    if c_id:
+        if c_id not in seen_call_ids:
+            deduplicated_rows.append(row)
+            seen_call_ids.add(c_id)
+    else:
+        deduplicated_rows.append(row)
 
-# Como interpretar:
-# - rows vazio → primeiro contato com o lead
-# - rows com N itens → há N tentativas anteriores em ordem cronológica
-# - rows[-1] → a tentativa mais recente
-# - rows[0] → a tentativa mais antiga (dentro do limite de 150)
+# Reverter para ASC (cronológico) para cálculos corretos de features
+rows = list(reversed(deduplicated_rows))
 ```
 
 ---

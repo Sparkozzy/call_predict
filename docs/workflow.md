@@ -171,14 +171,26 @@ else:
 **Query Supabase (Python SDK):**
 ```python
 response = supabase.table("Retell_calls_Mindflow") \
-    .select("to_number, created_at, disconnection_reason") \
+    .select("to_number, created_at, disconnection_reason, call_id") \
     .eq("to_number", numero) \
     .order("created_at", desc=True) \
     .limit(150) \
     .execute()
 
+# Deduplicação por call_id (manter o evento mais recente de cada ligação)
+seen_call_ids = set()
+deduplicated_rows = []
+for row in response.data:
+    c_id = row.get("call_id")
+    if c_id:
+        if c_id not in seen_call_ids:
+            deduplicated_rows.append(row)
+            seen_call_ids.add(c_id)
+    else:
+        deduplicated_rows.append(row)
+
 # Reverter para ASC (cronológico) para os cálculos de features
-rows = list(reversed(response.data))
+rows = list(reversed(deduplicated_rows))
 ```
 
 **Decisão pós-fetch:**
@@ -220,7 +232,7 @@ for row in rows:
 |---|---|---|---|
 | 1 | `ddd` | `category` | Extraído de `numero`: `+55XX...` → `XX` |
 | 2 | `Regiao` | `category` | Mapeamento DDD → Estado (tabela fixa) |
-| 3 | `n_tentativas_anteriores` | `int64` | `len(rows)` (total de registros históricos) |
+| 3 | `n_tentativas_anteriores` | `int64` | `len(rows)` (total de registros únicos por `call_id`) |
 | 4 | `horas_desde_primeiro_contato` | `float64` | `(agora_br - primeiro_created_at).total_seconds() / 3600` |
 | 5 | `n_voicemail_reached_anteriores` | `int64` | Contagem de `disconnection_reason == 'voicemail_reached'` |
 | 6 | `n_dial_no_answer_anteriores` | `int64` | Contagem de `disconnection_reason == 'dial_no_answer'` (inclui `no-answer` mapeado) |

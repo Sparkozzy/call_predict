@@ -58,6 +58,7 @@ O projeto `call_predict` é um sistema orientado a eventos (Event-Driven Workflo
 - **Arquivo**: `worker.py`
 - **Hook `startup`**: Carrega os modelos XGBoost **uma única vez** na inicialização do processo e os injeta no dicionário de contexto `ctx`. Isso evita I/O de disco a cada chamada.
 - **Tarefa principal**: `process_call_predict(ctx, payload)` — definida em `services.py`.
+- **Deduplicação**: O worker isola registros por `call_id` únicos antes da inferência, garantindo que as features de contagem reflitam chamadas reais e não eventos múltiplos da mesma ligação.
 
 ---
 
