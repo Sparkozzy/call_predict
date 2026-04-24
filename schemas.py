@@ -1,77 +1,53 @@
-"""
-schemas.py — Modelos Pydantic do projeto call_predict.
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
 
-Toda entrada e saída de endpoints e tasks deve ter um schema aqui.
-"""
-from typing import Optional
-from pydantic import BaseModel, field_validator
+class PredictWebhookInput(BaseModel):
+    """Payload de entrada para o /webhook/predict."""
+    numero: str = Field(..., description="Número do lead no formato +55DDXXXXXXXXX")
+    agent_id: str = Field(..., description="ID do agente Retell associado")
+    nome: str = Field(..., description="Nome completo do lead")
+    email: str = Field(..., description="E-mail do lead")
+    Prompt_id: str = Field(..., description="ID do prompt a ser usado no pre_call_processing")
 
-
-# ---------------------------------------------------------------------------
-# Payload de entrada — POST /webhook/predict
-# ---------------------------------------------------------------------------
-
-class CallPredictPayload(BaseModel):
-    """
-    Payload mínimo exigido pelo endpoint /webhook/predict.
-
-    Campos:
-        numero    — Número de telefone do lead (formato E.164, ex: +5511999999999)
-        agent_id  — Identificador do agente Retell que fará a ligação
-    """
-    numero: str
-    agent_id: str
-
-    @field_validator("numero")
-    @classmethod
-    def numero_deve_ter_prefixo_internacional(cls, v: str) -> str:
-        if not v.startswith("+"):
-            raise ValueError("O campo 'numero' deve começar com '+' (formato E.164).")
-        return v
-
-
-# ---------------------------------------------------------------------------
-# Schema de rastreabilidade — tabela model_executions (Supabase)
-# Usado como referência de schema. A tabela já existe no banco.
-# ---------------------------------------------------------------------------
-
-class ModelExecutionSchema(BaseModel):
-    """
-    Representa uma linha da tabela `model_executions` no Supabase.
-
-    Campos marcados como Optional são preenchidos apenas se o step
-    correspondente foi executado (ex: ls_* só existem se is_exploration=False).
-    """
-    # Chave primária (gerada pelo banco)
-    # id: uuid — gerado automaticamente via gen_random_uuid()
-
-    # Identificação do modelo
-    model_id: str
-    model_name: str
-    model_version: str
-
-    # Lead avaliado
-    to_number: str
-    agent_id: str
-
-    # Resultado Lead Scoring (nullable se exploration ou descartado antes do TP)
-    ls_probabilidade: Optional[float] = None
-    ls_decisao: Optional[str] = None          # 'LIGAR' | 'DESCARTAR'
-
-    # Resultado Timing Predict (nullable se LS retornou DESCARTAR ou exploration)
-    tp_horario_escolhido: Optional[int] = None    # 0 a 23
-    tp_probabilidade_pico: Optional[float] = None
-
-    # Flag de grupo de controle
-    is_exploration: bool
-
-
-# ---------------------------------------------------------------------------
-# Resposta do endpoint 202 Accepted
-# ---------------------------------------------------------------------------
-
-class AcceptedResponse(BaseModel):
-    """Resposta padrão para endpoints que enfileiram tarefas assíncronas."""
-    status: str = "accepted"
-    message: str
+class PreCallOutput(BaseModel):
+    """Payload de saída para o workflow pre_call_processing."""
+    workflow_name: str = "pre_call_processing"
     execution_id: str
+    numero: str
+    nome: str
+    email: str
+    agent_id: str
+    Prompt_id: str
+    quando_ligar: Optional[str] = None  # ISO 8601 com timezone
+
+class MLFeaturesLS(BaseModel):
+    """Vetor de features para o modelo Lead Scoring."""
+    ddd: str
+    Regiao: str
+    n_tentativas_anteriores: int
+    horas_desde_primeiro_contato: float
+    n_voicemail_reached_anteriores: int
+    n_dial_no_answer_anteriores: int
+    n_inactivity_anteriores: int
+    N_invalid_destination_anteriores: int
+    N_user_hangup_anteriores: int
+    N_user_declined_anteriores: int
+    N_telephony_provider_permission_denied_anteriores: int
+    N_dial_busy_anteriores: int
+    N_telephony_provider_unavailable_anteriores: int
+    N_agent_hangup_anteriores: int
+    N_error_asr_anteriores: int
+    N_error_retell_anteriores: int
+    N_dial_failed_anteriores: int
+    N_max_duration_reached_anteriores: int
+    N_ivr_reached_anteriores: int
+    ultima_disconnection_reason: str
+
+class MLFeaturesTP(BaseModel):
+    """Vetor de features para o modelo Timing Predict."""
+    ddd: str
+    hora_contato: int
+    dia_semana: int
+    hora_ultimo_contato: float
+    densidade_tentativas: float
+    pressao_recente: float

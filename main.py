@@ -1,94 +1,87 @@
 import os
 import uuid
-from fastapi import FastAPI, HTTPException, status
+import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
+from fastapi.responses import JSONResponse
 from arq import create_pool
 from arq.connections import RedisSettings
-from dotenv import load_dotenv
 
-from schemas import CallPredictPayload, AcceptedResponse
-from utils import register_workflow_execution
+from schemas import PredictWebhookInput
+from supabase import create_client, Client
 
-load_dotenv()
+# Configuração de Logs
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="Call Predict API - Recepcionista",
-    description="Endpoint para receber eventos de leads e enfileirar predições de ML.",
-    version="1.0.0"
+app = FastAPI(title="Call Predict API", version="1.0.0")
+
+# --- CLIENTES ---
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL", ""),
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 )
 
-# Tratamento da URL do Redis no Easypanel
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-if "@" in REDIS_URL:
-    protocol_user_pass, host_port = REDIS_URL.rsplit("@", 1)
-    protocol_user_pass = protocol_user_pass.replace("#", "%23")
-    REDIS_URL = f"{protocol_user_pass}@{host_port}"
+async def get_redis():
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    return await create_pool(RedisSettings.from_dsn(redis_url))
 
-# Pool do Redis será inicializado no startup da API
-redis_pool = None
+# --- ENDPOINTS ---
 
-@app.on_event("startup")
-async def startup_event():
-    global redis_pool
-    redis_pool = await create_pool(RedisSettings.from_dsn(REDIS_URL))
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "timestamp": datetime.now(ZoneInfo("UTC")).isoformat()}
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    if redis_pool:
-        await redis_pool.close()
-
-@app.post(
-    "/webhook/predict",
-    status_code=status.HTTP_202_ACCEPTED,
-    response_model=AcceptedResponse,
-    tags=["Webhook"]
-)
-async def predict_webhook(payload: CallPredictPayload):
+@app.post("/webhook/predict", status_code=status.HTTP_202_ACCEPTED)
+async def webhook_predict(
+    payload: PredictWebhookInput,
+    x_api_key: str = Header(None),
+    redis = Depends(get_redis)
+):
     """
-    Recebe os dados do lead e enfileira a tarefa de predição no Worker.
-    
-    Retorna 202 Accepted imediatamente.
+    Nó 1: Recebe o lead, valida o formato e enfileira para processamento.
     """
-    execution_id = str(uuid.uuid4())
-    
-    # Início do Fluxo: Registrar entrada em workflow_executions como PENDING
-    await register_workflow_execution(
-        execution_id=execution_id,
-        workflow_name="pre_call_processing",
-        input_data=payload.model_dump()
-    )
-    
-    try:
-        # Enfileira a tarefa no ARQ (Redis)
-        await redis_pool.enqueue_job(
-            "process_call_predict",
-            payload.model_dump(),
-            _job_id=f"job_{execution_id}"
+    # 1. Validação de API Key (opcional, dependendo da sua segurança)
+    # if x_api_key != os.getenv("WEBHOOK_API_KEY"):
+    #     raise HTTPException(status_code=401, detail="Chave de API inválida")
+
+    # 2. Validação de Negócio: Número deve começar com '+'
+    if not payload.numero.startswith("+"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="O número de telefone deve estar no formato internacional (+55...)"
         )
+
+    try:
+        # 3. Criação do Registro Mestre em workflow_executions (Rastreabilidade EDW)
+        execution_res = supabase.table("workflow_executions").insert({
+            "workflow_name": "call_predict",
+            "status": "PENDING",
+            "input_data": payload.dict(),
+            "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
+        }).execute()
         
-        return AcceptedResponse(
-            message="Tarefa call_predict enfileirada com sucesso.",
+        execution_id = execution_res.data[0]["id"]
+
+        # 4. Enfileiramento para o Worker (Redis/ARQ)
+        await redis.enqueue_job(
+            "process_call_predict_task",
+            data=payload.dict(),
             execution_id=execution_id
         )
-        
+
+        logger.info(f"Lead {payload.numero} enfileirado com sucesso. Exec ID: {execution_id}")
+
+        return {
+            "status": "Accepted",
+            "execution_id": execution_id,
+            "message": "Lead enfileirado para predição"
+        }
+
     except Exception as e:
-        # Erros de conexão com Redis, etc.
+        logger.error(f"Erro ao enfileirar lead: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro ao enfileirar tarefa: {str(e)}"
+            detail="Erro interno ao processar webhook"
         )
-
-@app.get("/health", tags=["Monitoring"])
-async def health_check():
-    from database import supabase
-    try:
-        # Testa Supabase com uma query simples
-        supabase.table("workflow_executions").select("id").limit(1).execute()
-        db_status = "connected"
-    except Exception:
-        db_status = "error"
-        
-    return {
-        "status": "ok", 
-        "redis": "connected" if redis_pool else "disconnected",
-        "supabase": db_status
-    }

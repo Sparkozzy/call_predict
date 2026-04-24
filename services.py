@@ -1,266 +1,233 @@
-import logging
-import random
-from typing import Any, Dict
 import os
+import random
 import httpx
-import pandas as pd
-import numpy as np
-from database import supabase
-from utils import update_workflow_status, run_step_with_retry
+import logging
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from typing import Dict, Any, Optional
+
+from supabase import create_client, Client
+from schemas import PredictWebhookInput, PreCallOutput
+from ml_logic import (
+    BRT, transform_to_ls_features, transform_to_tp_features,
+    run_ls_inference, run_tp_simulation
+)
 
 logger = logging.getLogger(__name__)
 
-async def process_call_predict(ctx: Dict[Any, Any], payload_dict: Dict[str, Any]):
+# --- CLIENTES ---
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL", ""),
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+)
+
+# --- AUXILIARES DE RASTREABILIDADE ---
+
+async def create_step(execution_id: str, step_name: str, input_data: Dict[str, Any] = None):
+    res = supabase.table("workflow_step_executions").insert({
+        "execution_id": execution_id,
+        "step_name": step_name,
+        "status": "RUNNING",
+        "input_data": input_data,
+        "started_at": datetime.now(ZoneInfo("UTC")).isoformat()
+    }).execute()
+    return res.data[0]["id"]
+
+async def finish_step(step_id: str, status: str, output_data: Dict[str, Any] = None, error: str = None):
+    supabase.table("workflow_step_executions").update({
+        "status": status,
+        "output_data": output_data,
+        "error_details": error,
+        "completed_at": datetime.now(ZoneInfo("UTC")).isoformat()
+    }).eq("id", step_id).execute()
+
+# --- ORQUESTRADOR PRINCIPAL ---
+
+async def process_call_predict(ctx, data: PredictWebhookInput, execution_id: str):
     """
-    Worker task: Executa a cascata de ML para predição de ligação com rastreabilidade completa.
+    Executa o workflow call_predict completo (10 nós).
+    O execution_id já foi criado pelo endpoint no momento do recebimento.
     """
-    # Extrair execution_id do job_id (formato: "job_<execution_id>")
-    job_id = ctx.get("job_id", "")
-    execution_id = job_id.replace("job_", "") if job_id.startswith("job_") else job_id
-    
-    numero = payload_dict.get("numero")
-    agent_id = payload_dict.get("agent_id")
-
-    logger.info(f"Iniciando process_call_predict ({execution_id}) para o número {numero}")
-
-    # 1. Início de Execução: Atualizar status para RUNNING
-    await update_workflow_status(execution_id, status="RUNNING")
-
     try:
-        # Step: Sorteio Exploration (Grupo de Controle 5%)
-        async def do_exploration_sorteio():
-            is_exploration = random.random() < 0.05
-            return {"is_exploration": is_exploration}
+        # Atualizar workflow para RUNNING
+        supabase.table("workflow_executions").update({
+            "status": "RUNNING",
+            "started_at": datetime.now(ZoneInfo("UTC")).isoformat()
+        }).eq("id", execution_id).execute()
 
-        sorteio_result = await run_step_with_retry(
-            execution_id=execution_id,
-            step_name="call_predict_sorteio_exploration",
-            worker_func=do_exploration_sorteio
-        )
-        is_exploration = sorteio_result["is_exploration"]
+        # [Nó 2] Exploitation Decision
+        step_exp = await create_step(execution_id, "call_predict_exploitation")
+        is_exploration = random.random() < float(os.getenv("EXPLORATION_RATE", "0.05"))
+        await finish_step(step_exp, "SUCCESS", {"is_exploration": is_exploration})
 
         if is_exploration:
-            logger.info(f"Execution {execution_id} sorteada para EXPLORATION. Pulando ML.")
-            
-            # Step: Persistir exploração
-            async def persist_exploration():
-                from utils import get_utc_now
-                data = {
-                    "model_name": "cascade_ls_tp",
-                    "to_number": numero,
-                    "agent_id": agent_id,
-                    "is_exploration": True,
-                    "created_at": get_utc_now()
-                }
-                supabase.table("model_executions").insert(data).execute()
-                return "Exploração persistida"
+            # Caminho Exploration: Pula tudo e agenda para próxima hora válida
+            await handle_exploration_path(ctx, data, execution_id)
+            return
 
-            await run_step_with_retry(
-                execution_id=execution_id,
-                step_name="call_predict_persist_model",
-                worker_func=persist_exploration
-            )
+        # [Nó 3] Get Rows (Normal Path)
+        step_get = await create_step(execution_id, "call_predict_get_rows", {"numero": data.numero})
+        res = supabase.table("Retell_calls_Mindflow")\
+            .select("to_number, created_at, disconnection_reason")\
+            .eq("to_number", data.numero)\
+            .order("created_at", desc=True)\
+            .limit(150)\
+            .execute()
+        
+        # Reverter para cronológico para as features
+        rows = list(reversed(res.data))
+        tem_historico = len(rows) > 0
+        await finish_step(step_get, "SUCCESS", {"rows_found": len(rows), "tem_historico": tem_historico})
 
-            # Step: Disparo da Ligação (Exploração - Horário Padrão 10h)
-            async def trigger_exploration_call():
-                from utils import get_next_occurrence_of_hour
-                defer_until = get_next_occurrence_of_hour(10) # 10h da manhã
-                await ctx["redis"].enqueue_job(
-                    "trigger_retell_call",
-                    {"numero": numero, "agent_id": agent_id, "execution_id": execution_id, "is_exploration": True},
-                    _defer_until=defer_until
-                )
-                return f"Ligação de exploração agendada para {defer_until.isoformat()}"
+        # Variáveis de controle de ML
+        ls_prob = None
+        tp_hora_escolhida = None
+        tp_prob_pico = None
+        quando_ligar_iso = None
 
-            await run_step_with_retry(
-                execution_id=execution_id,
-                step_name="call_predict_trigger_call",
-                worker_func=trigger_exploration_call
-            )
+        if tem_historico:
+            # [Nó 4] Transform LS
+            step_t_ls = await create_step(execution_id, "call_predict_data_transform_ls")
+            features_ls = transform_to_ls_features(data.numero, rows)
+            await finish_step(step_t_ls, "SUCCESS", {"features": features_ls.dict()})
 
-            await update_workflow_status(
-                execution_id, 
-                status="SUCCESS", 
-                output_data={"is_exploration": True, "note": "Lead sorteado para grupo de controle. Ligação agendada para 10h."}
-            )
-            return {"status": "success", "execution_id": execution_id, "is_exploration": True}
+            # [Nó 5] Run LS
+            step_r_ls = await create_step(execution_id, "call_predict_run_ls")
+            ls_prob = run_ls_inference(ctx["model_ls"], features_ls)
+            ls_decisao = "LIGAR" if ls_prob >= float(os.getenv("LS_THRESHOLD", "0.0045")) else "DESCARTAR"
+            await finish_step(step_r_ls, "SUCCESS", {"probabilidade": ls_prob, "decisao": ls_decisao})
 
-        # Step: ETL de Features
-        async def etl_features():
-            # 1. Buscar histórico no Supabase
-            # Trazemos os últimos 100 registros para o número do lead
-            response = supabase.table("Retell_calls_Mindflow")\
-                .select("created_at", "disconnection_reason")\
-                .eq("Numero", numero)\
-                .order("created_at", ascending=False)\
-                .limit(100)\
-                .execute()
-            
-            history_data = response.data if response.data else []
-            
-            # 2. Transformar em DataFrame de features
-            from ml_logic import transform_features, LS_FEATURES, TP_FEATURES
-            df_features = transform_features(numero, history_data)
-            
-            return {
-                "features_ls": df_features[LS_FEATURES].to_dict(orient="records")[0],
-                "features_tp": df_features[TP_FEATURES].to_dict(orient="records")[0]
-            }
-
-        etl_result = await run_step_with_retry(
-            execution_id=execution_id,
-            step_name="call_predict_etl_features",
-            worker_func=etl_features
-        )
-        features_ls = etl_result["features_ls"]
-        features_tp = etl_result["features_tp"]
-
-        # Step: Lead Scoring
-        async def lead_scoring():
-            model_ls = ctx.get("model_ls")
-            if not model_ls:
-                raise Exception("Modelo Lead Scoring não carregado.")
-            
-            # Preparar DMatrix (XGBoost requer formato específico)
-            import xgboost as xgb
-            # Converter features categóricas para o formato que o modelo espera (se necessário)
-            # Como o modelo LS usa 'Regiao' e 'ultima_disconnection_reason', precisamos garantir que sejam strings ou categóricos
-            # O XGBoost 2.0+ suporta categorias se o DataFrame tiver o tipo category
-            X = pd.DataFrame([features_ls])
-            for col in ['Regiao', 'ultima_disconnection_reason']:
-                X[col] = X[col].astype('category')
-            
-            # Predição de probabilidade
-            # dmat = xgb.DMatrix(X, enable_categorical=True) # Se o modelo foi salvo como Booster
-            # Se foi salvo via sklearn API:
-            ls_prob = float(model_ls.predict_proba(X)[:, 1][0])
-            ls_decisao = "LIGAR" if ls_prob > 0.5 else "DESCARTAR"
-            
-            return {"ls_probabilidade": ls_prob, "ls_decisao": ls_decisao}
-
-        ls_result = await run_step_with_retry(
-            execution_id=execution_id,
-            step_name="call_predict_lead_scoring",
-            worker_func=lead_scoring
-        )
-        ls_prob = ls_result["ls_probabilidade"]
-        ls_decisao = ls_result["ls_decisao"]
-
-        if ls_decisao == "DESCARTAR":
-            logger.info(f"Execution {execution_id} DESCARTADA pelo Lead Scoring (prob: {ls_prob:.4f})")
-            await update_workflow_status(
-                execution_id, 
-                status="SUCCESS", 
-                output_data={
-                    "ls_probabilidade": ls_prob,
-                    "ls_decisao": ls_decisao,
-                    "note": "Lead descartado pelo modelo de scoring."
-                }
-            )
-            return {"status": "success", "execution_id": execution_id, "ls_decisao": ls_decisao}
-
-        # Step: Timing Predict
-        async def timing_predict():
-            model_tp = ctx.get("model_tp")
-            if not model_tp:
-                raise Exception("Modelo Timing Predict não carregado.")
-            
-            X = pd.DataFrame([features_tp])
-            # Predição (assume que o modelo retorna o índice da hora 0-23 com maior prob)
-            tp_probs = model_tp.predict_proba(X)[0]
-            tp_horario_escolhido = int(np.argmax(tp_probs))
-            tp_probabilidade_pico = float(np.max(tp_probs))
-            
-            return {
-                "tp_horario_escolhido": tp_horario_escolhido,
-                "tp_probabilidade_pico": tp_probabilidade_pico
-            }
-
-        tp_result = await run_step_with_retry(
-            execution_id=execution_id,
-            step_name="call_predict_timing_predict",
-            worker_func=timing_predict
-        )
-        tp_horario = tp_result["tp_horario_escolhido"]
-        tp_prob = tp_result["tp_probabilidade_pico"]
-
-        # Step: Persistência de resultados
-        async def persist_model():
-            data = {
-                "model_name": "cascade_ls_tp",
-                "to_number": numero,
-                "agent_id": agent_id,
+            # Registrar inferência inicial
+            model_exec_res = supabase.table("model_executions").insert({
+                "model_id": "lead_scoring_v1",
+                "model_name": "XGBoost Lead Scoring",
+                "model_version": "1.0.0",
+                "to_number": data.numero,
+                "agent_id": data.agent_id,
                 "ls_probabilidade": ls_prob,
                 "ls_decisao": ls_decisao,
-                "tp_horario_escolhido": tp_horario,
-                "tp_probabilidade_pico": tp_prob,
-                "is_exploration": False,
-                "created_at": get_utc_now()
-            }
-            supabase.table("model_executions").insert(data).execute()
-            return "Resultados persistidos"
+                "is_exploration": False
+            }).execute()
+            model_exec_id = model_exec_res.data[0]["id"]
 
-        from utils import get_utc_now
-        await run_step_with_retry(
-            execution_id=execution_id,
-            step_name="call_predict_persist_model",
-            worker_func=persist_model
-        )
+            # [Nó 6] LS Threshold
+            step_gate = await create_step(execution_id, "call_predict_ls_threshold")
+            if ls_decisao == "DESCARTAR":
+                await finish_step(step_gate, "SUCCESS", {"passou": False, "motivo": "Abaixo do threshold"})
+                await finalize_workflow(execution_id, "SUCCESS", {"decisao": "DESCARTAR", "motivo": "ls_threshold"})
+                return
+            await finish_step(step_gate, "SUCCESS", {"passou": True})
+        else:
+            # Lead sem histórico -> Pula LS, registra model_exec genérico para o TP
+            model_exec_res = supabase.table("model_executions").insert({
+                "model_id": "timing_predict_v1",
+                "model_name": "XGBoost Timing Predict (No History)",
+                "model_version": "1.0.0",
+                "to_number": data.numero,
+                "agent_id": data.agent_id,
+                "is_exploration": False
+            }).execute()
+            model_exec_id = model_exec_res.data[0]["id"]
 
-        # Step: Disparo da Ligação
-        async def trigger_call():
-            from utils import get_next_occurrence_of_hour
-            defer_until = get_next_occurrence_of_hour(tp_horario)
-            
-            # Enfileira a tarefa de disparo real (Retell) no futuro
-            await ctx["redis"].enqueue_job(
-                "trigger_retell_call",
-                {"numero": numero, "agent_id": agent_id, "execution_id": execution_id},
-                _defer_until=defer_until
-            )
-            return f"Ligação agendada para {defer_until.isoformat()}"
+        # [Nó 7] Transform TP (Sempre roda se passou do LS ou se não tem histórico)
+        now_br = datetime.now(BRT)
+        step_t_tp = await create_step(execution_id, "call_predict_data_transform_tp")
+        features_tp = transform_to_tp_features(data.numero, rows, now_br)
+        await finish_step(step_t_tp, "SUCCESS", {"features": features_tp.dict()})
 
-        await run_step_with_retry(
-            execution_id=execution_id,
-            step_name="call_predict_trigger_call",
-            worker_func=trigger_call
-        )
+        # [Nó 8] Run TP (Simulação 24h)
+        step_r_tp = await create_step(execution_id, "call_predict_run_tp")
+        melhor = run_tp_simulation(ctx["model_tp"], features_tp)
+        
+        # Calcular quando_ligar
+        agendamento = now_br + timedelta(hours=melhor["offset"])
+        agendamento = agendamento.replace(minute=0, second=0, microsecond=0)
+        quando_ligar_iso = agendamento.isoformat()
+        
+        tp_hora_escolhida = melhor["hora"]
+        tp_prob_pico = melhor["probabilidade"]
+        
+        await finish_step(step_r_tp, "SUCCESS", {
+            "melhor_hora": tp_hora_escolhida,
+            "quando_ligar": quando_ligar_iso,
+            "prob_pico": tp_prob_pico
+        })
 
-        # Finalização: SUCCESS
-        await update_workflow_status(
-            execution_id, 
-            status="SUCCESS", 
-            output_data={
-                "ls_probabilidade": ls_prob,
-                "ls_decisao": ls_decisao,
-                "tp_horario_escolhido": tp_horario,
-                "tp_probabilidade_pico": tp_prob,
-                "scheduled_at": "deferred"
-            }
-        )
+        # Atualizar model_executions com dados do TP
+        supabase.table("model_executions").update({
+            "tp_horario_escolhido": tp_hora_escolhida,
+            "tp_probabilidade_pico": tp_prob_pico
+        }).eq("id", model_exec_id).execute()
+
+        # [Nó 9 & 10] Send Payload
+        await send_to_mindflow(execution_id, data, quando_ligar_iso)
 
     except Exception as e:
-        logger.error(f"Erro fatal no workflow {execution_id}: {e}")
-        await update_workflow_status(
-            execution_id, 
-            status="FAILED", 
-            error_details=str(e)
-        )
-        return {"status": "failed", "error": str(e)}
+        logger.exception(f"Erro no processamento do lead {data.numero}")
+        await finalize_workflow(execution_id, "FAILED", error=str(e))
 
-    return {"status": "success", "execution_id": execution_id}
+async def handle_exploration_path(ctx, data: PredictWebhookInput, execution_id: str):
+    """Lógica específica para o grupo de controle (Exploration)."""
+    # Registrar inferência como exploration
+    supabase.table("model_executions").insert({
+        "model_id": "exploration_control",
+        "to_number": data.numero,
+        "agent_id": data.agent_id,
+        "is_exploration": True
+    }).execute()
 
-async def trigger_retell_call(ctx: Dict[Any, Any], payload: Dict[str, Any]):
-    """
-    Worker task: Efetivamente dispara a ligação via Retell AI.
-    """
-    numero = payload.get("numero")
-    agent_id = payload.get("agent_id")
-    execution_id = payload.get("execution_id")
+    # Cálculo da próxima hora válida (Decisão Q4)
+    now_br = datetime.now(BRT)
+    TP_BLOCKED_START = int(os.getenv("TP_BLOCKED_START", "23"))
+    TP_BLOCKED_END = int(os.getenv("TP_BLOCKED_END", "6"))
     
-    logger.info(f"Disparando ligação Retell para {numero} (Execution: {execution_id})")
+    hora_atual = now_br.hour
+    quando_ligar_iso = None
     
-    # TODO: Implementar chamada real para Retell API
-    # node 'call_predict_trigger_call' enfileira esta tarefa.
+    if hora_atual >= TP_BLOCKED_START or hora_atual <= TP_BLOCKED_END:
+        # Se for hora proibida, agendar para 7h da manhã
+        agendamento = now_br.replace(hour=TP_BLOCKED_END + 1, minute=0, second=0, microsecond=0)
+        if agendamento <= now_br:
+            agendamento += timedelta(days=1)
+        quando_ligar_iso = agendamento.isoformat()
     
-    return {"status": "triggered", "numero": numero}
+    await send_to_mindflow(execution_id, data, quando_ligar_iso)
+
+async def send_to_mindflow(execution_id: str, input_data: PredictWebhookInput, quando_ligar: Optional[str]):
+    """Nós 9 e 10: Cria payload e envia para o workflow seguinte."""
+    step_send = await create_step(execution_id, "call_predict_send")
+    
+    payload = {
+        "workflow_name": "pre_call_processing",
+        "execution_id": execution_id,
+        "numero": input_data.numero,
+        "nome": input_data.nome,
+        "email": input_data.email,
+        "agent_id": input_data.agent_id,
+        "Prompt_id": input_data.Prompt_id,
+        "quando_ligar": quando_ligar
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            url = os.getenv("MINDFLOW_WEBHOOK_URL")
+            key = os.getenv("WEBHOOK_API_KEY")
+            response = await client.post(
+                url, json=payload,
+                headers={"X-API-Key": key, "Content-Type": "application/json"},
+                timeout=30.0
+            )
+            response.raise_for_status()
+            await finish_step(step_send, "SUCCESS", {"response_status": response.status_code, "payload": payload})
+            await finalize_workflow(execution_id, "SUCCESS", {"decisao": "LIGAR", "quando_ligar": quando_ligar})
+        except Exception as e:
+            await finish_step(step_send, "FAILED", error=str(e))
+            raise e
+
+async def finalize_workflow(execution_id: str, status: str, output: Dict[str, Any] = None, error: str = None):
+    supabase.table("workflow_executions").update({
+        "status": status,
+        "output_data": output,
+        "error_details": error,
+        "completed_at": datetime.now(ZoneInfo("UTC")).isoformat()
+    }).eq("id", execution_id).execute()

@@ -1,6 +1,8 @@
 # Arquitetura Técnica — Call Predict (EDW)
 
 > **Fonte da Verdade Técnica.** Este documento descreve a infraestrutura e as decisões arquiteturais do projeto. Toda mudança estrutural deve refletir aqui antes de ser codificada.
+> **Instância Prod:** `https://call-predict-github.bkpxmb.easypanel.host/`
+> **Repo:** `https://github.com/Sparkozzy/call_predict.git`
 
 ---
 

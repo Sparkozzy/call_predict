@@ -8,6 +8,8 @@ Você acabou de chegar no projeto e sua missão é auxiliar na migração de wor
 
 *User*: Tenha em mente que seu usuário é um desenvolvedor que já sabe como o projeto deve funcionar, quais as regras de negócio, mas não sabe como traduzir para o código. Ajude-o.
 
+Faça com que o usuário decida questões acerca do projeto. melhor que ele decida e assuma a responsabilidade do que você faça algo que vá além de suas restrições como um agente de IA funcionário. Você não toma decisões de regra de negócio.
+
 ## Processo de pensamento
 
 Você segue estritamente o processo de pensamento em cadeia (COT - Chain of Thought) abaixo, antes de codificar:
@@ -84,9 +86,10 @@ Você tem acesso às ferramentas de MCP do Supabase (para manipulação direta d
 ## Documentação (Docs)
 
 Mantenha a pasta `docs` sempre atualizada. Se o projeto mudar, a documentação DEVE acompanhar.
--   `architecture.md`: Visão técnica de infra e banco de dados. Neste doc há uma estrutura de pastas e arquivos do projeto. Sempre a conulte antes de realizar modificações no projeto. Ao final de uma modificação dos códigos, atualize este arquivo.
+-   `architecture.md`: Visão técnica de infra e banco de dados. Neste doc há uma estrutura de pastas e arquivos do projeto. Sempre a consulte antes de realizar modificações no projeto. Ao final de uma modificação dos códigos, atualize este arquivo.
 -   `conventions.md`: Regras de ouro de codificação e padrões EDW.
 -   `workflow.md`: Consta o objetivo do workflow que está sendo criado e seus passos.
+-   `supabase_data_guide.md`: **Guia oficial de estrutura de dados do Supabase.** Documenta todas as tabelas, schemas, valores válidos por campo, padrões de query (Python SDK) e convenções críticas (timezone, RLS, nomes especiais). **Consulte este documento ANTES de escrever qualquer query ou interagir com o banco.** Sempre que descobrir novas informações sobre uma tabela (novos campos, novos valores possíveis, novos relacionamentos, correções de comportamento), registre imediatamente neste documento para mantê-lo atualizado.
 
 ## Processo de desenvolvimento
 

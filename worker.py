@@ -1,11 +1,12 @@
 import os
 import logging
 import joblib
-import xgboost as xgb
 from arq.connections import RedisSettings
 from dotenv import load_dotenv
-from services import process_call_predict, trigger_retell_call
+from services import process_call_predict
+from schemas import PredictWebhookInput
 
+# Configuração de Logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -31,10 +32,8 @@ async def startup(ctx):
             logger.info(f"Modelo Lead Scoring carregado: {ls_model_path}")
         else:
             logger.error(f"Arquivo não encontrado: {ls_model_path}")
-            ctx["model_ls"] = None
     except Exception as e:
         logger.error(f"Erro ao carregar Lead Scoring: {e}")
-        ctx["model_ls"] = None
 
     try:
         if os.path.exists(tp_model_path):
@@ -42,16 +41,24 @@ async def startup(ctx):
             logger.info(f"Modelo Timing Predict carregado: {tp_model_path}")
         else:
             logger.error(f"Arquivo não encontrado: {tp_model_path}")
-            ctx["model_tp"] = None
     except Exception as e:
         logger.error(f"Erro ao carregar Timing Predict: {e}")
-        ctx["model_tp"] = None
 
 async def shutdown(ctx):
     logger.info("Encerrando Worker...")
 
+# --- TASK WRAPPERS ---
+
+async def process_call_predict_task(ctx, data: dict, execution_id: str):
+    """
+    Wrapper para converter o dict do Redis de volta para Pydantic 
+    e chamar o orquestrador.
+    """
+    payload = PredictWebhookInput(**data)
+    await process_call_predict(ctx, payload, execution_id)
+
 class WorkerSettings:
-    functions = [process_call_predict, trigger_retell_call]
+    functions = [process_call_predict_task]
     on_startup = startup
     on_shutdown = shutdown
     
