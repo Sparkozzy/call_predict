@@ -22,7 +22,7 @@ DDD_TO_STATE = {
 }
 
 # Categorias exatas do treinamento (para garantir mapping correto no XGBoost)
-CAT_DDD = ['11', '12', '13', '14', '15', '16', '17', '18', '19', '21', '22', '24', '27', '28', '29', '31', '32', '33', '34', '35', '37', '38', '41', '42', '43', '44', '45', '46', '47', '48', '49', '51', '53', '54', '59', '61', '62', '63', '64', '65', '66', '67', '68', '69', '71', '73', '74', '75', '77', '79', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '94', '95', '97', '98', '99', 'na']
+CAT_DDD = ['11', '12', '13', '14', '15', '16', '17', '18', '19', '21', '22', '24', '27', '28', '29', '31', '32', '33', '34', '35', '37', '38', '41', '42', '43', '44', '45', '46', '47', '48', '49', '51', '53', '54', '59', '61', '62', '63', '64', '65', '66', '67', '68', '69', '71', '73', '74', '75', '77', '79', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '94', '95', '97', '98', '99']
 CAT_REGIAO = ['AC', 'AL', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP']
 CAT_DISCONNECT = ['agent_hangup', 'dial_busy', 'dial_failed', 'dial_no_answer', 'error_asr', 'error_retell', 'inactivity', 'invalid_destination', 'ivr_reached', 'max_duration_reached', 'primeiro_contato', 'telephony_provider_permission_denied', 'telephony_provider_unavailable', 'user_declined', 'user_hangup', 'voicemail_reached']
 CAT_DIA_SEMANA = [0, 1, 2, 3, 4, 5, 6]

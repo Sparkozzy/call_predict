@@ -109,7 +109,8 @@ async def process_call_predict(ctx, data: PredictWebhookInput, execution_id: str
                 "agent_id": data.agent_id,
                 "ls_probabilidade": ls_prob,
                 "ls_decisao": ls_decisao,
-                "is_exploration": False
+                "is_exploration": False,
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
             }).execute()
             model_exec_id = model_exec_res.data[0]["id"]
 
@@ -128,7 +129,8 @@ async def process_call_predict(ctx, data: PredictWebhookInput, execution_id: str
                 "model_version": "1.0.0",
                 "to_number": data.numero,
                 "agent_id": data.agent_id,
-                "is_exploration": False
+                "is_exploration": False,
+                "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
             }).execute()
             model_exec_id = model_exec_res.data[0]["id"]
 
@@ -176,7 +178,8 @@ async def handle_exploration_path(ctx, data: PredictWebhookInput, execution_id: 
         "model_id": "exploration_control",
         "to_number": data.numero,
         "agent_id": data.agent_id,
-        "is_exploration": True
+        "is_exploration": True,
+        "created_at": datetime.now(ZoneInfo("UTC")).isoformat()
     }).execute()
 
     # Cálculo da próxima hora válida (Decisão Q4)
