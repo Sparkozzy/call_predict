@@ -186,6 +186,8 @@ async def handle_exploration_path(ctx, data: PredictWebhookInput, execution_id: 
     
     supabase.table("model_executions").insert({
         "model_id": "exploration_control",
+        "model_name": "Exploration Control",
+        "model_version": "1.0.0",
         "to_number": data.numero,
         "agent_id": data.agent_id,
         "is_exploration": True
