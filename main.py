@@ -7,9 +7,13 @@ from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.responses import JSONResponse
 from arq import create_pool
 from arq.connections import RedisSettings
+from dotenv import load_dotenv
 
 from schemas import PredictWebhookInput
 from supabase import create_client, Client
+
+# Carregar variáveis de ambiente
+load_dotenv()
 
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +24,7 @@ app = FastAPI(title="Call Predict API", version="1.0.0")
 # --- CLIENTES ---
 supabase: Client = create_client(
     os.getenv("SUPABASE_URL", ""),
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    os.getenv("SUPABASE_KEY", "")  # Alterado para bater com o .env
 )
 
 async def get_redis():

@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, Any, Optional
+from dotenv import load_dotenv
 
 from supabase import create_client, Client
 from schemas import PredictWebhookInput, PreCallOutput
@@ -13,12 +14,14 @@ from ml_logic import (
     run_ls_inference, run_tp_simulation
 )
 
+load_dotenv()
+
 logger = logging.getLogger(__name__)
 
 # --- CLIENTES ---
 supabase: Client = create_client(
     os.getenv("SUPABASE_URL", ""),
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    os.getenv("SUPABASE_KEY", "")  # Alterado para bater com o .env
 )
 
 # --- AUXILIARES DE RASTREABILIDADE ---
