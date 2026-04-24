@@ -70,15 +70,32 @@ async def process_call_predict(ctx, data: PredictWebhookInput, execution_id: str
         # [Nó 3] Get Rows
         step_get = await create_step(execution_id, "call_predict_get_rows", {"numero": data.numero, "limit": 150})
         res = supabase.table("Retell_calls_Mindflow")\
-            .select("to_number, created_at, disconnection_reason")\
+            .select("to_number, created_at, disconnection_reason, call_id")\
             .eq("to_number", data.numero)\
             .order("created_at", desc=True)\
             .limit(150)\
             .execute()
         
-        rows = list(reversed(res.data))
+        # Deduplicar por call_id (manter o mais recente de cada ligação)
+        seen_call_ids = set()
+        deduplicated_rows = []
+        for row in res.data:
+            c_id = row.get("call_id")
+            if c_id:
+                if c_id not in seen_call_ids:
+                    deduplicated_rows.append(row)
+                    seen_call_ids.add(c_id)
+            else:
+                # Se não tiver call_id, mantemos o registro (pode ser legado ou evento isolado)
+                deduplicated_rows.append(row)
+        
+        rows = list(reversed(deduplicated_rows))
         tem_historico = len(rows) > 0
-        await finish_step(step_get, "SUCCESS", {"rows_count": len(rows), "tem_historico": tem_historico})
+        await finish_step(step_get, "SUCCESS", {
+            "rows_count": len(rows), 
+            "original_rows_count": len(res.data),
+            "tem_historico": tem_historico
+        })
 
         ls_prob = None
         tp_hora_escolhida = None
