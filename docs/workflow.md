@@ -2,7 +2,7 @@
 
 > **Objetivo**: Receber um lead via webhook, avaliar sua probabilidade de atendimento (Lead Scoring) e determinar o melhor horário para ligar (Timing Predict), enviando os qualificados para o workflow `pre_call_processing`.
 > **URL Produção**: `https://call-predict-github.bkpxmb.easypanel.host/`
-> **Repositório**: `https://github.com/Sparkozzy/call_predict.git`
+> **Repositório**: `https://github.com/Sparkozzy/call_predict.git` (main branch)
 
 ---
 
@@ -66,19 +66,22 @@ flowchart TD
 **Tipo:** Webhook Receiver (FastAPI endpoint)
 **Step name:** `call_predict_input`
 
-**Payload de entrada (todos os campos obrigatórios):**
+**Payload de entrada:**
 ```json
 {
   "numero": "+5548996027108",
   "agent_id": "agent_1e4cfa23e3910c557d82167949",
   "nome": "João Silva",
   "email": "joao@example.com",
-  "Prompt_id": "24"
+  "Prompt_id": "24",
+  "contexto": "Opcional: contexto da conversa",
+  "empresa": "Opcional: nome da empresa",
+  "segmento": "Opcional: segmento de atuação"
 }
 ```
 
 **Ações:**
-1. Validação Pydantic (numero: `str`, agent_id: `str`, nome: `str`, email: `str`, Prompt_id: `str`)
+1. Validação Pydantic (numero, agent_id, nome, email, Prompt_id + opcionais: contexto, empresa, segmento)
 2. Validação de negócio: `numero` deve iniciar com `+`
 3. Criação do registro mestre em `workflow_executions` (status: `PENDING`)
 4. Enfileiramento no Redis/ARQ
@@ -522,11 +525,14 @@ payload = {
     "email": email,
     "agent_id": agent_id,
     "Prompt_id": Prompt_id,
-    "quando_ligar": quando_ligar_iso  # None para exploration em horário válido
+    "contexto": contexto,
+    "empresa": empresa,
+    "segmento": segmento,
+    "quando_ligar": quando_ligar_iso
 }
 ```
 
-> Todos os campos (`nome`, `email`, `Prompt_id`) vêm do payload de entrada do webhook, conforme decisão Q2.
+> Todos os campos (`nome`, `email`, `Prompt_id`, `contexto`, `empresa`, `segmento`) vêm do payload de entrada do webhook, conforme decisão Q2 e atualização.
 
 ---
 

@@ -218,7 +218,10 @@ async def send_to_mindflow(execution_id: str, input_data: PredictWebhookInput, q
         "nome": input_data.nome,
         "email": input_data.email,
         "agent_id": input_data.agent_id,
-        "Prompt_id": input_data.Prompt_id, # Garantido aqui
+        "Prompt_id": input_data.Prompt_id,
+        "contexto": input_data.contexto,
+        "empresa": input_data.empresa,
+        "segmento": input_data.segmento,
         "quando_ligar": quando_ligar
     }
     

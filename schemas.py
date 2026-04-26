@@ -8,6 +8,9 @@ class PredictWebhookInput(BaseModel):
     nome: str = Field(..., description="Nome completo do lead")
     email: str = Field(..., description="E-mail do lead")
     Prompt_id: str = Field(..., description="ID do prompt a ser usado no pre_call_processing")
+    contexto: Optional[str] = Field(None, description="Contexto adicional do lead")
+    empresa: Optional[str] = Field(None, description="Nome da empresa do lead")
+    segmento: Optional[str] = Field(None, description="Segmento de negócio do lead")
 
 class PreCallOutput(BaseModel):
     """Payload de saída para o workflow pre_call_processing."""
@@ -18,6 +21,9 @@ class PreCallOutput(BaseModel):
     email: str
     agent_id: str
     Prompt_id: str
+    contexto: Optional[str] = None
+    empresa: Optional[str] = None
+    segmento: Optional[str] = None
     quando_ligar: Optional[str] = None  # ISO 8601 com timezone
 
 class MLFeaturesLS(BaseModel):
