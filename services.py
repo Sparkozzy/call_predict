@@ -158,7 +158,8 @@ async def process_call_predict(ctx, data: PredictWebhookInput, execution_id: str
         melhor = run_tp_simulation(ctx["model_tp"], features_tp)
         
         agendamento = now_br + timedelta(hours=melhor["offset"])
-        agendamento = agendamento.replace(minute=0, second=0, microsecond=0)
+        # Randomizar minutos para evitar pico em horários redondos
+        agendamento = agendamento.replace(minute=random.randint(1, 59), second=0, microsecond=0)
         quando_ligar_iso = agendamento.isoformat()
         
         await finish_step(step_r_tp, "SUCCESS", {
@@ -201,7 +202,8 @@ async def handle_exploration_path(ctx, data: PredictWebhookInput, execution_id: 
     agendamento = now_br + timedelta(hours=1) # Default próxima hora
     
     if hora_atual >= TP_BLOCKED_START or hora_atual <= TP_BLOCKED_END:
-        agendamento = now_br.replace(hour=TP_BLOCKED_END + 1, minute=0, second=0, microsecond=0)
+        # Avançar para o primeiro horário válido com minutos randomizados
+        agendamento = now_br.replace(hour=TP_BLOCKED_END + 1, minute=random.randint(1, 59), second=0, microsecond=0)
         if agendamento <= now_br:
             agendamento += timedelta(days=1)
     

@@ -120,8 +120,8 @@ TP_BLOCKED_END = int(os.getenv("TP_BLOCKED_END", "6"))
 # Verificar se a hora atual é válida
 hora_atual = now_br.hour
 if hora_atual >= TP_BLOCKED_START or hora_atual <= TP_BLOCKED_END:
-    # Avançar até a próxima hora válida (7h)
-    quando_ligar = now_br.replace(hour=TP_BLOCKED_END + 1, minute=0, second=0, microsecond=0)
+    # Avançar até a próxima hora válida (7h) com minutos randomizados para evitar picos
+    quando_ligar = now_br.replace(hour=TP_BLOCKED_END + 1, minute=random.randint(1, 59), second=0, microsecond=0)
     if quando_ligar <= now_br:
         quando_ligar += timedelta(days=1)
 else:
@@ -461,10 +461,10 @@ melhor = max(resultados, key=lambda x: x["probabilidade"])
 from datetime import timedelta
 
 quando_ligar = now_br + timedelta(hours=melhor["offset_horas"])
-# Ajustar para o início exato da hora (minutos=0, segundos=0)
-quando_ligar = quando_ligar.replace(minute=0, second=0, microsecond=0)
+# Ajustar para a hora escolhida com minutos randomizados para evitar picos
+quando_ligar = quando_ligar.replace(minute=random.randint(1, 59), second=0, microsecond=0)
 quando_ligar_iso = quando_ligar.isoformat()
-# Ex: "2026-04-24T15:00:00-03:00"
+# Ex: "2026-04-24T15:23:00-03:00"
 ```
 
 **Registro em `model_executions`:**
