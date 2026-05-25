@@ -101,6 +101,12 @@ Toda execução deve ser registrada no Supabase seguindo o padrão Mestre-Detalh
 - **Worker (ARQ)**: Executa toda lógica pesada: ETL de features, inferência ML, rastreabilidade no Supabase, e eventualmente disparar a ligação.
 - **Proibido**: A API nunca importa modelos XGBoost. O Worker nunca retorna respostas HTTP diretas.
 
+## 📝 Scripts Exploratórios e Células
+
+- **Regra da Primeira Célula**: TODO arquivo de experimentação ou script Python dividido em células interativas (usando `# %%`) **DEVE obrigatoriamente iniciar com `# %%` na linha 1**.
+- Todos os `imports` e configurações de ambiente devem ficar encapsulados e restritos a essa primeira célula. Nunca insira um `import` solto ao longo ou topo do arquivo que não esteja dentro de uma marcação de célula.
+
+
 ## 🗄️ Conexões Singleton (Banco e Redis)
 
 - **Supabase Client**: Instanciar o cliente `supabase` **uma única vez** por processo (module-level singleton). Nunca criar dentro de funções de task.

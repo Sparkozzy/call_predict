@@ -1,0 +1,9 @@
+{
+    "model_name": "lead_scoring_v2_stable.json",
+    "threshold": 0.15,
+    "metrics_at_threshold": {
+        "recall": 0.9915,
+        "precision": 0.0513,
+        "leads_cut_pct": 0.416
+    }
+}

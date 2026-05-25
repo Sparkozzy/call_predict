@@ -1,0 +1,12 @@
+{
+    "n_estimators": 300,
+    "max_depth": 3,
+    "learning_rate": 0.03,
+    "scale_pos_weight": 90.36940587740663,
+    "tree_method": "hist",
+    "enable_categorical": true,
+    "subsample": 0.9742330364657608,
+    "colsample_bytree": 0.873345412527521,
+    "random_state": 42,
+    "early_stopping_rounds": 20
+}

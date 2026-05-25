@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "9e1c8b3103f92fa8092568a44fe64858de7c5c9dc65ce4bea8f168080e889cfd"
+    },
+    "pandas-pro": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pandas-pro/SKILL.md",
+      "computedHash": "244a87c4e9e20aac2822cdd99a221a7fa6999bf1194abbbd4a5e16bde34bf6ef"
+    },
+    "xgboost-lightgbm": {
+      "source": "tondevrel/scientific-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/xgboost-lightgbm/SKILL.md",
+      "computedHash": "0d12a2dd6d52e1a1d84aabefdaabd36fc67c99141f0c97aa0d1fc7327a0d0090"
+    }
+  }
+}
